@@ -32,8 +32,10 @@ and a minimal implementation of the diagnostic.
 - `mc_method_compare.py` — the method comparison on randomized clustered
   regressions (Section 7): first-order prefix vs recursive-greedy search vs
   exhaustive enumeration on $G=12$ clusters, $100$ replications per setting under
-  a shared candidate pool; reports found fractions, cost/optimum ratios, exact
-  evaluation counts, wall-clock, and stop reasons; writes
+  a shared candidate pool; cluster scores lie in the column space of their own
+  Gram matrices and sum to zero, and the recursive search stops on the
+  no-improvement rule of Algorithm 2; reports found fractions, cost/optimum
+  ratios, exact evaluation counts, wall-clock, and stop reasons; writes
   `data/mc_method_compare_results.csv`.
 - `freeze_x2.py` — the fragile-coefficient evidence of Section 8 (the x2 coefficient
   whose t-statistic falls from 13.34 to -0.04 after deleting one 5-row cluster).

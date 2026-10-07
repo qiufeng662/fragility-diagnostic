@@ -25,6 +25,7 @@ STEPS = [
     "mc_eval.py",              # Section 7 Monte-Carlo method evaluation
     "mc_eval_sig.py",          # Section 7 full-significance (CR1 margin) evaluation
     "mc_scalability.py",       # Section 7 pruned-search scalability table
+    "mc_method_compare.py",    # Section 7 method comparison table
     "freeze_x2.py",            # Section 8 fragile-coefficient evidence
 ]
 

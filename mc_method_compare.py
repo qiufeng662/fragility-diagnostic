@@ -7,17 +7,20 @@ whole-cluster deletion rule, SAME row cost, and SAME CR1 convention:
   - recursive-greedy search (Algorithm 2);
   - exhaustive enumeration over 2^12 masks (small-scale ground truth).
 
-Both search methods share the SAME candidate pool (all G clusters) and run to
-completion: each stops when it finds a feasible set, or when its search over the
-candidate pool is exhausted.  "Evaluations" is the number of exact post-deletion
-coefficient evaluations (one Cholesky solve each); the significance margin is
-computed only for masks whose coefficient passes the sign condition, and its
-cost is captured in wall-clock time.
+The data-generating process respects the OLS column-space constraint: each
+cluster score lies in the column space of its own Gram matrix (psi_g = H_g v_g,
+whitened), and the scores sum to zero across clusters (the full-sample first-
+order condition), so every instance is realizable by a genuine clustered OLS
+design.  Positive definiteness of a retained design is checked by the smallest
+eigenvalue of Q = I - sum_g x_g H_g, not by whether a Cholesky factorization
+happens to succeed.
 
-Reports, per setting (100 replications, seed 20261005): infeasible count,
-feasible count, found fraction over feasible instances, mean found-cost /
-exhaustive-optimum ratio, mean evaluations, mean wall-clock per feasible
-instance, and the miss breakdown (feasible instances not found).
+Both search methods share the SAME candidate pool (all G clusters); each runs
+to its own stopping condition, and the reported evaluations and wall-clock are
+what each actually uses.  The recursive search stops when a feasible set is
+found, when no remaining candidate improves the target coefficient, when no
+remaining candidate admits a full-rank retained design, or when the candidate
+pool is exhausted (these are recorded separately).
 
 Run:  python mc_method_compare.py
 Writes: data/mc_method_compare_results.csv
@@ -25,15 +28,15 @@ Writes: data/mc_method_compare_results.csv
 import time
 import csv
 import numpy as np
-from scipy import linalg as sla
 from scipy import stats
 
 rng = np.random.default_rng(20261005)
 P = 5
-B = 4.0
+B = 2.0
 G = 12
 REPS = 100
 ALPHA = 0.05
+EIG_TOL = 1e-9
 
 
 def build_instance(concentration, sigma):
@@ -45,24 +48,36 @@ def build_instance(concentration, sigma):
     ev, Q = np.linalg.eigh(S)
     Sinvsqrt = Q @ np.diag(1.0 / np.sqrt(np.clip(ev, 1e-12, None))) @ Q.T
     V = U @ Sinvsqrt
-    H = np.array([np.outer(V[g], V[g]) for g in range(G)])
+    H = np.array([np.outer(V[g], V[g]) for g in range(G)])  # sum_g H_g = I
     if concentration == "concentrated":
-        h1 = 0.5
+        h1 = 0.7
         H[0] = h1 * np.outer(a, a)
         rest = (np.eye(P) - H[0]) / (G - 1)
         for g in range(1, G):
             H[g] = rest
-    psi = rng.normal(0, sigma, (G, P))
-    psi -= psi.mean(axis=0)
+        # psi_0 lies along a (the one-dimensional range of H_0); the other
+        # clusters have full-rank Gram matrices, and the last cluster absorbs
+        # the zero-sum constraint.
+        psi = np.zeros((G, P))
+        psi[0] = rng.normal(0, sigma) * a
+        for g in range(1, G - 1):
+            psi[g] = rng.normal(0, sigma, P)
+        psi[G - 1] = -(psi[:G - 1].sum(axis=0))
+    else:
+        # Each H_g is rank one along V_g, so psi_g = c_g V_g; the coefficients
+        # are projected onto the zero-sum subspace sum_g c_g V_g = 0.
+        cc = rng.normal(0, sigma, G)
+        cc = cc - V @ (V.T @ cc)
+        psi = np.array([cc[g] * V[g] for g in range(G)])
     c = rng.integers(5, 21, size=G).astype(float)
     return H, psi, c, a
 
 
-def _chol(Q):
-    try:
-        return np.linalg.cholesky(Q)
-    except np.linalg.LinAlgError:
+def _solve_z(Q, r):
+    """Return Q^{-1} r if Q is positive definite, else None."""
+    if np.linalg.eigvalsh(Q).min() <= EIG_TOL:
         return None
+    return np.linalg.solve(Q, r)
 
 
 def make_evaluator(H, psi, c, a):
@@ -73,20 +88,16 @@ def make_evaluator(H, psi, c, a):
         if not mask:
             return B / 2.0
         Q = np.eye(P) - H[mask].sum(axis=0)
-        L = _chol(Q)
-        if L is None:
+        z = _solve_z(Q, psi[mask].sum(axis=0))
+        if z is None:
             return None
-        r = psi[mask].sum(axis=0)
-        z = sla.solve_triangular(L.T, sla.solve_triangular(L, r, lower=True), lower=False)
         return B / 2.0 - a @ z
 
     def margin(mask):
         Q = np.eye(P) - H[mask].sum(axis=0)
-        L = _chol(Q)
-        if L is None:
+        z = _solve_z(Q, psi[mask].sum(axis=0))
+        if z is None:
             return None
-        r = psi[mask].sum(axis=0)
-        z = sla.solve_triangular(L.T, sla.solve_triangular(L, r, lower=True), lower=False)
         beta1 = B / 2.0 - a @ z
         kept = [g for g in range(len(H)) if g not in mask]
         G_new = len(kept)
@@ -96,7 +107,7 @@ def make_evaluator(H, psi, c, a):
         v = 0.0
         for g in kept:
             psig = psi[g] + H[g] @ z
-            zg = sla.solve_triangular(L.T, sla.solve_triangular(L, psig, lower=True), lower=False)
+            zg = np.linalg.solve(Q, psig)
             v += (a @ zg) ** 2
         rho = stats.t.ppf(1 - ALPHA / 2, G_new - 1) ** 2 * (G_new / (G_new - 1)) * ((n_new - 1) / (n_new - P))
         return (-beta1) ** 2 - rho * v
@@ -134,21 +145,17 @@ def beta1_of(mask, H, psi, a):
     if not mask:
         return B / 2.0
     Q = np.eye(P) - H[mask].sum(axis=0)
-    L = _chol(Q)
-    if L is None:
+    z = _solve_z(Q, psi[mask].sum(axis=0))
+    if z is None:
         return None
-    r = psi[mask].sum(axis=0)
-    z = sla.solve_triangular(L.T, sla.solve_triangular(L, r, lower=True), lower=False)
     return B / 2.0 - a @ z
 
 
 def margin_of(mask, H, psi, c, a):
     Q = np.eye(P) - H[mask].sum(axis=0)
-    L = _chol(Q)
-    if L is None:
+    z = _solve_z(Q, psi[mask].sum(axis=0))
+    if z is None:
         return None
-    r = psi[mask].sum(axis=0)
-    z = sla.solve_triangular(L.T, sla.solve_triangular(L, r, lower=True), lower=False)
     beta1 = B / 2.0 - a @ z
     kept = [g for g in range(len(H)) if g not in mask]
     G_new = len(kept)
@@ -158,7 +165,7 @@ def margin_of(mask, H, psi, c, a):
     v = 0.0
     for g in kept:
         psig = psi[g] + H[g] @ z
-        zg = sla.solve_triangular(L.T, sla.solve_triangular(L, psig, lower=True), lower=False)
+        zg = np.linalg.solve(Q, psig)
         v += (a @ zg) ** 2
     rho = stats.t.ppf(1 - ALPHA / 2, G_new - 1) ** 2 * (G_new / (G_new - 1)) * ((n_new - 1) / (n_new - P))
     return (-beta1) ** 2 - rho * v
@@ -177,17 +184,23 @@ def first_order_prefix(H, psi, c, a, beta1, feasible, evals):
 def recursive_search(H, psi, c, a, beta1, feasible, evals):
     cand = list(range(len(H)))
     mask = []
+    current_b = beta1([])
     for _ in range(len(cand)):
-        best_g, best_b = None, float('inf')
+        best_g, best_b = None, current_b
+        any_valid = False
         for g in cand:
             if g in mask:
                 continue
             b = beta1(mask + [g])
-            if b is not None and b < best_b:
+            if b is None:
+                continue
+            any_valid = True
+            if b < best_b:
                 best_b, best_g = b, g
         if best_g is None:
-            return mask, None, evals[0], 'stall'
+            return mask, None, evals[0], ('invalid' if not any_valid else 'stall')
         mask.append(best_g)
+        current_b = best_b
         if feasible(mask):
             return mask, cost(mask, c), evals[0], 'found'
     return mask, None, evals[0], 'pool'
@@ -196,11 +209,12 @@ def recursive_search(H, psi, c, a, beta1, feasible, evals):
 rows = []
 header = ["setting", "infeasible", "feasible", "fo_found", "rg_found",
           "fo_cost_opt", "rg_cost_opt", "fo_evals", "rg_evals",
-          "fo_ms", "rg_ms", "fo_miss_pool", "rg_miss_pool", "rg_miss_stall"]
+          "fo_ms", "rg_ms", "fo_miss_pool", "rg_miss_stall",
+          "rg_miss_invalid", "rg_miss_pool"]
 
 print(f"{'setting':>20} {'infeas':>6} {'feas':>5} {'FO found':>9} {'RG found':>9} "
       f"{'FO c/opt':>9} {'RG c/opt':>9} {'FO evals':>9} {'RG evals':>9} "
-      f"{'FO ms':>8} {'RG ms':>8} | FO miss RG miss(pool/stall)")
+      f"{'FO ms':>8} {'RG ms':>8} | RG miss(stall/invalid/pool)")
 for conc in ["concentrated", "dispersed"]:
     for sigma in [0.5, 1.0]:
         label = f"{conc}, sigma={sigma}"
@@ -212,10 +226,12 @@ for conc in ["concentrated", "dispersed"]:
         t_fo = 0.0
         t_rg = 0.0
         fo_miss = 0
-        rg_miss_pool = 0
-        rg_miss_stall = 0
-        for _ in range(REPS):
+        rg_miss = {'stall': 0, 'invalid': 0, 'pool': 0}
+        for rep in range(REPS):
             H, psi, c, a = build_instance(conc, sigma)
+            if rep == 0:
+                res = [np.linalg.norm(psi[g] - H[g] @ np.linalg.pinv(H[g]) @ psi[g]) for g in range(G)]
+                print(f"  [{label}] colspace residual max = {max(res):.2e}")
             opt = exhaustive_min(H, psi, c, a, G)
             if opt is None:
                 infeasible_n += 1
@@ -240,10 +256,7 @@ for conc in ["concentrated", "dispersed"]:
                 rg_found += 1
                 rg_ratios.append(rg_cost / opt)
             else:
-                if rg_stop == 'stall':
-                    rg_miss_stall += 1
-                else:
-                    rg_miss_pool += 1
+                rg_miss[rg_stop] += 1
         fo_frac = fo_found / feasible_n if feasible_n else 0.0
         rg_frac = rg_found / feasible_n if feasible_n else 0.0
         fo_ratio = np.mean(fo_ratios) if fo_ratios else float('nan')
@@ -256,13 +269,13 @@ for conc in ["concentrated", "dispersed"]:
                      round(fo_ratio, 4), round(rg_ratio, 4),
                      round(fo_e, 2), round(rg_e, 2),
                      round(fo_ms, 3), round(rg_ms, 3),
-                     fo_miss, rg_miss_pool, rg_miss_stall])
+                     fo_miss, rg_miss['stall'], rg_miss['invalid'], rg_miss['pool']])
         print(f"{label:>20} {infeasible_n:>6} {feasible_n:>5} "
               f"{fo_frac:>9.2f} {rg_frac:>9.2f} "
               f"{fo_ratio:>9.2f} {rg_ratio:>9.2f} "
               f"{fo_e:>9.1f} {rg_e:>9.1f} "
               f"{fo_ms:>8.2f} {rg_ms:>8.2f} | "
-              f"FO miss {fo_miss}  RG miss({rg_miss_pool}/{rg_miss_stall})")
+              f"RG miss({rg_miss['stall']}/{rg_miss['invalid']}/{rg_miss['pool']})")
 
 with open("data/mc_method_compare_results.csv", "w", newline="") as f:
     w = csv.writer(f)
