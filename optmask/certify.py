@@ -66,10 +66,21 @@ def det_adj_precompute(fit):
     every cluster.  Returns a dict keyed off ``fit``; the evaluator then computes
     the exact margin for ANY cluster-deletion set in O(p^3) without refitting and
     without a Woodbury LU (Codex MATH_RESEARCH §12.6, eq. 12.55-12.65).
+
+    Raises ``ValueError`` if the fit is invalid for inference (a non-finite
+    finite-sample scale, i.e. a degenerate single-cluster / no-residual-df fit,
+    or a rank-deficient within-entity design), so that an invalid fit cannot
+    propagate into the whitening precompute and be mistaken for a feasible one.
     """
     X, u, P = fit.X, fit.resid, fit.xtx_inv
     code = fit.cluster_code
     k = X.shape[1]
+    if not np.isfinite(float(getattr(fit, "scale", np.nan))):
+        raise ValueError("det_adj_precompute: fit has no valid finite-sample scale "
+                         "(degenerate inference); reject before whitening")
+    if np.linalg.matrix_rank(X) < k:
+        raise ValueError("det_adj_precompute: design is rank-deficient; "
+                         "reject before whitening")
     G = int(code.max()) + 1 if len(code) else 0
     A = np.zeros((G, k, k))
     psi = np.zeros((G, k))
