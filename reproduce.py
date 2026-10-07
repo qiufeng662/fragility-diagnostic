@@ -56,7 +56,7 @@ def refit1(mask):
 
 
 mask1 = []
-traj = []           # (rows, clusters, beta, t) per accepted step
+traj = []           # (rows, clusters, beta, t, added_cluster) per accepted step
 nodes1 = 0
 t1 = time.perf_counter()
 flip_rows = None
@@ -82,7 +82,7 @@ for _ in range(200):
     beta1, t1k, gk = refit1(mask1)
     nodes1 += 1
     rows1 = int(c1[mask1].sum())
-    traj.append((rows1, len(mask1), beta1, t1k))
+    traj.append((rows1, len(mask1), beta1, t1k, bg))
     if flip_rows is None and beta1 < 0:
         flip_rows = rows1
         print(f"[Panel 1] sign flips after deleting {rows1} obs "
@@ -101,9 +101,11 @@ if reverse_rows is None:
           f"up to {rows1} obs ({len(mask1)} clusters), stop_reason={stop_reason}, "
           f"nodes={nodes1}, wall={time.perf_counter()-t1:.0f}s")
 
-# save the accepted-step trajectory (machine-readable)
-pd.DataFrame(traj, columns=["rows", "clusters", "beta", "t"]).to_csv(
+# save the accepted-step trajectory (machine-readable, with the added-cluster id)
+pd.DataFrame(traj, columns=["rows", "clusters", "beta", "t", "added_cluster"]).to_csv(
     os.path.join(HERE, "data", "panel_firm_trajectory.csv"), index=False)
+with open(os.path.join(HERE, "data", "panel_firm_stop_reason.txt"), "w") as f:
+    f.write(stop_reason + "\n")
 print(f"[Panel 1] trajectory saved: {len(traj)} steps, stop_reason={stop_reason}")
 
 # ---------------- Panel 2: listed firms (fragile conclusion) ----------------

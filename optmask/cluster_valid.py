@@ -120,9 +120,12 @@ class TWFE_cluster_valid:
         g = int(np.unique(code).size)
         n_entities_kept = int(np.unique(entity_code[sub]).size)
         p_eff = k_all + n_entities_kept          # full-design rank (absorbed entity FE)
-        if g <= 1 or n <= p_eff:
-            # inference unavailable: single cluster or no residual degrees of freedom
+        rank_ok = np.linalg.matrix_rank(Xs) >= k_all
+        if g <= 1 or n <= p_eff or not rank_ok:
+            # inference unavailable: single cluster, no residual df, or a
+            # rank-deficient within-entity design
             se_all = np.full(k_all, np.nan)
+            scale = np.nan
         else:
             scale = (g / (g - 1)) * ((n - 1) / (n - p_eff))
             vcov_all = xtx_inv_all @ meat_all @ xtx_inv_all * scale
