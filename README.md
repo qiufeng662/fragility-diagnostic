@@ -29,6 +29,12 @@ and a minimal implementation of the diagnostic.
   (determinant/adjugate vs. direct solves; candidate-pruning recall; Monte-Carlo
   method evaluation with threshold sensitivity and optimality gap; pruned-search
   scalability table).
+- `mc_method_compare.py` — the method comparison on randomized clustered
+  regressions (Section 7): first-order prefix vs recursive-greedy search vs
+  exhaustive enumeration on $G=12$ clusters, $100$ replications per setting under
+  a shared candidate pool; reports found fractions, cost/optimum ratios, exact
+  evaluation counts, wall-clock, and stop reasons; writes
+  `data/mc_method_compare_results.csv`.
 - `freeze_x2.py` — the fragile-coefficient evidence of Section 8 (the x2 coefficient
   whose t-statistic falls from 13.34 to -0.04 after deleting one 5-row cluster).
 - `diag_panel2.py` — the full diagnostic (Algorithm 1) applied to the listed-firm
@@ -88,6 +94,7 @@ python pruning_recall.py       # Section 7 pruning check
 python mc_eval.py              # Section 7 Monte-Carlo method evaluation
 python mc_eval_sig.py          # Section 7 full-significance (CR1 margin) evaluation
 python mc_scalability.py       # Section 7 pruned-search scalability table
+python mc_method_compare.py    # Section 7 method comparison table (data/mc_method_compare_results.csv)
 python freeze_x2.py            # Section 8 fragile-coefficient evidence
 python diag_panel2.py          # Section 8 listed-firm full diagnostic
 python detadj_refit_gap.py     # Section 2 det/adjugate vs re-fit gap
