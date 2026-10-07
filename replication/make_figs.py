@@ -102,12 +102,12 @@ fig.tight_layout(); fig.savefig(f"{OUT}/fig2_box_failure.pdf"); fig.savefig(f"{O
 plt.close(fig)
 
 # ---- Fig 3: additive first-order gain vs flip threshold ----
+# Paper's first-order term: dbeta_j^{(1)}(g) = (P X_g' u_g)_j (no resolvent).
 j = f0.names.index("x6")
 db = np.zeros(G)
 for g in range(G):
     Xg = X[code == g]; ug = u[code == g]
-    wg = np.linalg.solve(np.eye(Xg.shape[0]) - Xg @ P @ Xg.T, ug)
-    db[g] = (P @ Xg.T @ wg)[j]
+    db[g] = (P @ Xg.T @ ug)[j]
 theta0 = float(f0.beta[j])
 pos = np.sort(db[db > 0])[::-1]
 cum = np.cumsum(pos)

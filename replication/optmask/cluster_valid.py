@@ -39,9 +39,11 @@ def _demean_one_way(values: np.ndarray, keep: np.ndarray, code: np.ndarray,
 class TWFE_cluster_valid:
     """Two-way FE estimator valid for leave-cluster-out influence.
 
-    Entity FE is absorbed; time effects enter as dummy regressors.  Only the
-    original regressors are exposed in ``Fit.names``, ``beta``, ``se`` and
-    ``influence``; the year dummies remain internal.
+    Entity FE is absorbed; time effects enter as dummy regressors.  ``Fit.X``,
+    ``xtx_inv``, ``meat``, ``score_cluster`` and ``influence`` use the FULL
+    design (real regressors first, then year dummies) so the whitened cluster
+    matrices satisfy sum_g H_g = I; ``names``, ``beta`` and ``se`` expose only
+    the k_real real regressors.
     """
 
     def __init__(self, y_col: str, regressors: Sequence[str], entity_col: str,
@@ -115,33 +117,30 @@ class TWFE_cluster_valid:
         infl = (xtx_inv_all @ Xs.T) * (resid / (1.0 - h))
         influence_all = infl.T
 
-        # Expose only the real regressors to the solver / influence machinery.
-        beta = beta_all[:k_real]
-        se = se_all[:k_real]
-        X_real = Xs[:, :k_real]
-        xtx_inv = xtx_inv_all[:k_real, :k_real]
-        meat = meat_all[:k_real, :k_real]
-        score_cluster = agg_all[:, :k_real]
-        influence = influence_all[:, :k_real]
-
+        # The Fit contract exposes the FULL design (real regressors + year
+        # dummies): X, xtx_inv, meat, score_cluster and influence all live in
+        # the full k_all coordinate system, so sum_g H_g = I holds exactly for
+        # the whitened cluster matrices.  Target-level quantities (names, beta,
+        # se) remain the k_real real regressors, which occupy the FIRST k_real
+        # columns of the full design.
         return Fit(
             names=tuple(self.regressors),
-            beta=beta,
-            se=se,
+            beta=beta_all[:k_real],
+            se=se_all[:k_real],
             n=n,
             g=g,
             df=g - 1,
-            X=X_real,
+            X=Xs,
             resid=resid,
-            xtx_inv=xtx_inv,
+            xtx_inv=xtx_inv_all,
             ssr=float(resid @ resid),
             cluster_code=code,
             full_index=np.flatnonzero(keep),
-            meat=meat,
-            score_cluster=score_cluster,
+            meat=meat_all,
+            score_cluster=agg_all,
             scale=scale,
             n_clusters=prepared.get("n_clusters", size),
-            influence=influence,
+            influence=influence_all,
         )
 
 

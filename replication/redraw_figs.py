@@ -108,13 +108,12 @@ ax.annotate(r"$\widehat\eta_K\geq1$ from $K\approx%d$" % kcross, xy=(kcross, 1.0
 ax.set_xlabel("Deletion budget $K$ (rows)"); ax.set_ylabel(r"$\widehat\eta_K$")
 finish(fig, "fig2_box_failure")
 
-# fig3: additive gap
+# fig3: additive gap (paper's first-order term, no resolvent)
 j = f0.names.index("x6")
 db = np.zeros(G)
 for g in range(G):
     Xg = X[code == g]; ug = u[code == g]
-    wg = np.linalg.solve(np.eye(Xg.shape[0]) - Xg @ P @ Xg.T, ug)
-    db[g] = (P @ Xg.T @ wg)[j]
+    db[g] = (P @ Xg.T @ ug)[j]
 theta0 = float(f0.beta[j])
 cum = np.cumsum(np.sort(db[db > 0])[::-1])
 fig, ax = plt.subplots(figsize=(6.2, 3.6))

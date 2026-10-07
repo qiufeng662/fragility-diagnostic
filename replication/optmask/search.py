@@ -17,6 +17,15 @@ from __future__ import annotations
 
 import numpy as np
 
+if __package__ in (None, ""):
+    # Direct execution (python optmask/search.py): re-anchor the package so the
+    # relative imports below resolve as they do under python -m optmask.search.
+    import os
+    import sys
+
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    __package__ = "optmask"
+
 from .certify import det_adj_margin
 from .diagnostics import _exact_q
 

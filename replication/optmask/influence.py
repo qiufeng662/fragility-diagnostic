@@ -283,7 +283,11 @@ def generic_row_margins(fit, targets) -> dict:
     for t in targets:
         wv = _linear_weights(fit, t)
         theta, se = _theta_se(fit, wv)
-        theta_new = theta - fit.influence @ wv
+        # influence lives in the full design coordinates (real regressors first);
+        # pad the weight vector with zeros on the internal dummy columns.
+        wv_full = np.zeros(fit.X.shape[1])
+        wv_full[: len(wv)] = wv
+        theta_new = theta - fit.influence @ wv_full
         out[t.column] = _target_margin(theta_new / se, t, t_crit(t.alpha, fit.df))
     return out
 
@@ -296,7 +300,9 @@ def generic_cluster_margins(fit, targets) -> dict:
     for t in targets:
         wv = _linear_weights(fit, t)
         theta, se = _theta_se(fit, wv)
-        db = np.bincount(code, weights=fit.influence @ wv, minlength=n_cl)
+        wv_full = np.zeros(fit.X.shape[1])
+        wv_full[: len(wv)] = wv
+        db = np.bincount(code, weights=fit.influence @ wv_full, minlength=n_cl)
         out[t.column] = _target_margin((theta - db) / se, t, t_crit(t.alpha, fit.df))
     return out
 
