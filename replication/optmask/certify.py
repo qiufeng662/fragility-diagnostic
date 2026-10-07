@@ -85,7 +85,8 @@ def det_adj_precompute(fit):
     psi_tilde = (Ps @ psi.T).T
     return {"fit": fit, "P": P, "Ps": Ps, "A": A, "psi": psi, "H": H,
             "psi_tilde": psi_tilde, "c": c, "k": k, "G": G,
-            "n0": fit.n, "G0": fit.g}
+            "n0": fit.n, "G0": fit.g,
+            "n_entities": getattr(fit, "n_entities", 0)}
 
 
 def det_adj_margin(pre, target, deleted_clusters):
@@ -123,8 +124,10 @@ def det_adj_margin(pre, target, deleted_clusters):
 
     n_new = pre["n0"] - float(pre["c"] @ x)
     G_new = pre["G0"] - float(x.sum())
-    if G_new < 1 or n_new <= pre["k"]:
+    n_entities_kept = pre["n_entities"] - float(x.sum())
+    p_eff = pre["k"] + max(n_entities_kept, 0.0)   # full-design rank under the mask
+    if G_new < 1 or n_new <= p_eff:
         return -np.inf
-    scale = (G_new / (G_new - 1.0)) * ((n_new - 1.0) / (n_new - pre["k"]))
+    scale = (G_new / (G_new - 1.0)) * ((n_new - 1.0) / (n_new - p_eff))
     rho = inf.t_crit(target.alpha, G_new - 1) ** 2 * scale
     return (N ** 2 * d ** 2 - rho * S) / d ** 4

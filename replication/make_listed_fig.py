@@ -51,17 +51,14 @@ def refit(mask):
     for g in mask:
         keep &= code != g
     f = est.fit(prep, keep)
-    n_ent_kept = d["firm_id"].nunique() - len(mask)
-    t_full = (f.beta[j] / f.se[j]) / np.sqrt(
-        (f.n - k_all) / (f.n - k_all - n_ent_kept))
-    return f.beta[j], t_full
+    return f.beta[j], f.beta[j] / f.se[j], f.g
 
 
 def search():
     qs = np.array([(_exact_q(pre, target, [g]) if _exact_q(pre, target, [g]) is not None
                     else -1e9) for g in range(G)])
     cand = np.argsort(-qs)[:150].tolist()
-    b0, t0 = refit([])
+    b0, t0, _ = refit([])
     mask, rows_list, beta_list, t_list = [], [0], [b0], [t0]
     for _ in range(200):
         bb, bg = -np.inf, refit(mask)[0]
@@ -76,11 +73,11 @@ def search():
         if bg is None:
             break
         mask.append(bg)
-        beta, t = refit(mask)
+        beta, t, gnum = refit(mask)
         rows_list.append(int(c[mask].sum()))
         beta_list.append(beta)
         t_list.append(t)
-        crit = stats.t.ppf(1 - 0.05 / 2, f0.g - len(mask))
+        crit = stats.t.ppf(1 - 0.05 / 2, gnum - 1)
         if abs(t) > crit and beta > 0:
             break
     return np.array(rows_list), np.array(beta_list), np.array(t_list), len(mask)
@@ -109,7 +106,7 @@ ax[1].plot(rows, beta, "o-", ms=4, lw=1.2, color="#606C38")
 ax[1].axhline(0, color="#AAAAAA", lw=0.7, ls=":")
 axb = ax[1].twinx()
 axb.plot(rows, np.abs(t), "s--", ms=3, lw=1.0, color="#BC6C25")
-crit_final = stats.t.ppf(1 - 0.05 / 2, f0.g - n_del)
+crit_final = stats.t.ppf(1 - 0.05 / 2, f0.g - n_del - 1)
 axb.axhline(crit_final, color="#BC6C25", lw=0.8, ls="--", alpha=0.6)
 ifl = int(np.argmax(beta > 0))
 ax[1].annotate(f"sign flip at {rows[ifl]} rows",

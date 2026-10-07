@@ -27,6 +27,7 @@ class Fit:
     score_cluster: np.ndarray               # (n_clusters, k) per-cluster score
     scale: float                            # finite-sample scale factor
     n_clusters: int = 0                     # full-data cluster count
+    n_entities: int = 0                     # kept entity count (for p_eff CR1 rank)
     influence: np.ndarray = None            # (n_kept, k) per-row influence on beta
 
     @property

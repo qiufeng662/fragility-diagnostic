@@ -80,10 +80,7 @@ def refit(mask):
     for g in mask:
         keep &= code != g
     f = est.fit(prep, keep)
-    n_ent_kept = d["firm_id"].nunique() - len(mask)
-    t_fit = f.beta[j] / f.se[j]
-    t_full = t_fit / np.sqrt((f.n - k_all) / (f.n - k_all - n_ent_kept))
-    return f.beta[j], t_full, f.g
+    return f.beta[j], f.beta[j] / f.se[j], f.g
 
 
 def greedy_search(candidates, label):

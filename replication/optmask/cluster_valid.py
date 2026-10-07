@@ -109,7 +109,9 @@ class TWFE_cluster_valid:
             agg_all[:, j] = np.bincount(code, weights=Xs[:, j] * resid, minlength=size)
         meat_all = agg_all.T @ agg_all
         g = int(np.unique(code).size)
-        scale = (g / max(g - 1, 1)) * ((n - 1) / max(n - k_all, 1))
+        n_entities_kept = int(np.unique(entity_code[sub]).size)
+        p_eff = k_all + n_entities_kept          # full-design rank (absorbed entity FE)
+        scale = (g / max(g - 1, 1)) * ((n - 1) / max(n - p_eff, 1))
         vcov_all = xtx_inv_all @ meat_all @ xtx_inv_all * scale
         se_all = np.sqrt(np.clip(np.diag(vcov_all), 1e-30, None))
 
@@ -140,6 +142,7 @@ class TWFE_cluster_valid:
             score_cluster=agg_all,
             scale=scale,
             n_clusters=prepared.get("n_clusters", size),
+            n_entities=n_entities_kept,
             influence=influence_all,
         )
 

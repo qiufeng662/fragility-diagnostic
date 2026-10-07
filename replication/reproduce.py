@@ -31,13 +31,7 @@ j1 = f1.names.index("x6")
 t1 = f1.beta[j1] / f1.se[j1]
 print(f"[Panel 1] n={f1.n}, G={f1.g}, beta(x6)={f1.beta[j1]:.4f}, "
       f"se={f1.se[j1]:.4f}, t={t1:.3f}")
-# unified CR1 convention: rank adjustment from k_all (regressors + year dummies)
-# to p_eff = k_real + (T-1) + n_entities (absorbed entity effects count in the rank)
-k_all1 = prep1["X"].shape[1]
-p_eff1 = len(regs1) + int(d1["year"].nunique()) - 1 + int(d1["firm_id"].nunique())
-se1_u = float(f1.se[j1]) * np.sqrt((f1.n - k_all1) / (f1.n - p_eff1))
-print(f"[Panel 1] unified CR1 (p_eff={p_eff1}): se={se1_u:.4f}, "
-      f"t={f1.beta[j1] / se1_u:.3f}")
+# fit.se already uses the full-design-rank CR1 convention (p_eff).
 
 pre1 = det_adj_precompute(f1)
 h_g = np.array([np.linalg.norm(pre1["H"][g], 2) for g in range(pre1["G"])])
@@ -96,13 +90,9 @@ j2 = f2.names.index("x1")
 t2 = f2.beta[j2] / f2.se[j2]
 print(f"[Panel 2] n={f2.n}, G={f2.g}, beta(x1)={f2.beta[j2]:.4f}, "
       f"se={f2.se[j2]:.4f}, t={t2:.3f}")
-k_all2 = prep2["X"].shape[1]
-p_eff2 = len(regs2) + int(d2["year"].nunique()) - 1 + int(d2["firm_id"].nunique())
-se2_u = float(f2.se[j2]) * np.sqrt((f2.n - k_all2) / (f2.n - p_eff2))
-print(f"[Panel 2] unified CR1 (p_eff={p_eff2}): se={se2_u:.4f}, "
-      f"t={f2.beta[j2] / se2_u:.3f}")
+# fit.se already uses the full-design-rank CR1 convention (p_eff).
 
-# flip search: target x1 positive, real refit, find sign flip (6 obs) then sig (55 obs)
+# flip search: target x1 positive, real refit, find sign flip (6 obs) then sig
 pre2 = det_adj_precompute(f2)
 target = Target(column="x1", sign=1, alpha=0.05)
 code2 = prep2["cluster_code"]
@@ -116,11 +106,7 @@ def stat(mask):
     for g in mask:
         keep &= code2 != g
     f = est2.fit(prep2, keep)
-    n, g = f.n, f.g
-    n_ent_kept = d2["firm_id"].nunique() - len(mask)
-    t_fit = f.beta[j2] / f.se[j2]
-    t_full = t_fit / np.sqrt((n - k_all) / (n - k_all - n_ent_kept))
-    return f.beta[j2], t_full, g
+    return f.beta[j2], f.beta[j2] / f.se[j2], f.g
 
 
 qs = np.array([(_exact_q(pre2, target, [g]) if _exact_q(pre2, target, [g]) is not None else -1e9)

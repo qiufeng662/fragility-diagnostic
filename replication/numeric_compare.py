@@ -22,8 +22,13 @@ n_trials = 200
 
 def build_Q(delta, legitimate=True):
     if legitimate:
-        # 0 < Q <= I: the whitened post-deletion matrix Q = I - H(x).
-        ev = np.concatenate([[delta], rng.uniform(0.0, 1.0, p - 1)])
+        # 0 < Q <= I with lambda_min(Q)=delta and lambda_max(Q)=1 exactly
+        # at the level of the constructed spectrum, hence kappa_2(Q)=1/delta.
+        if not 0.0 < delta <= 1.0:
+            raise ValueError("legitimate deletion matrices require 0 < delta <= 1")
+        ev = np.concatenate(
+            [[delta], rng.uniform(delta, 1.0, p - 2), [1.0]]
+        )
     else:
         # general SPD: secondary eigenvalues may exceed 1.
         ev = np.concatenate([[delta], rng.uniform(0.5, 2.0, p - 1)])
@@ -34,9 +39,11 @@ def build_Q(delta, legitimate=True):
 
 def run(delta, legitimate):
     err_da, err_ch, err_lu = [], [], []
+    conds = []
     fail_ch = 0
     for _ in range(n_trials):
         Q = build_Q(delta, legitimate)
+        conds.append(float(np.linalg.cond(Q, 2)))
         r = rng.normal(size=p)
         a = rng.normal(size=p)
         Qr, Rr = np.linalg.qr(Q)
@@ -54,13 +61,15 @@ def run(delta, legitimate):
         q_lu = float(a @ np.linalg.solve(Q, r))
         err_lu.append(abs(q_lu - q_true) / max(abs(q_true), 1e-300))
     med = lambda x: float(np.median(x)) if x else float("inf")
-    return med(err_da), med(err_ch), med(err_lu), fail_ch
+    return med(conds), med(err_da), med(err_ch), med(err_lu), fail_ch
 
 
 for legit, label in [(True, "legitimate Q (0<Q<=I)"), (False, "general SPD")]:
     print(f"\n=== {label} ===")
-    print(f"{'delta':>8} | {'det/adj err':>11} {'chol err':>11} {'lu err':>11} | "
+    print(f"{'delta':>8} {'median kappa':>13} | "
+          f"{'det/adj err':>11} {'chol err':>11} {'lu err':>11} | "
           f"{'chol fail':>9}")
     for delta in deltas:
-        eda, ech, elu, fail = run(delta, legit)
-        print(f"{delta:8.0e} | {eda:11.2e} {ech:11.2e} {elu:11.2e} | {fail:9d}")
+        cond, eda, ech, elu, fail = run(delta, legit)
+        print(f"{delta:8.0e} {cond:13.3e} | "
+              f"{eda:11.2e} {ech:11.2e} {elu:11.2e} | {fail:9d}")

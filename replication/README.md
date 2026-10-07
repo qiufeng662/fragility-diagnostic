@@ -27,7 +27,7 @@ and a minimal implementation of the diagnostic.
   method evaluation with threshold sensitivity and optimality gap; pruned-search
   scalability table).
 - `freeze_x2.py` — the fragile-coefficient evidence of Section 8 (the x2 coefficient
-  whose t-statistic falls from 14.50 to -0.05 after deleting one 5-row cluster).
+  whose t-statistic falls from 13.34 to -0.04 after deleting one 5-row cluster).
 - `diag_panel2.py` — the full diagnostic (Algorithm 1) applied to the listed-firm
   panel: leverage profile, box certificate, first-order distortion, search
   trajectory, and an informal AMIP (first-order influence) comparison.
@@ -95,16 +95,14 @@ The key reported numbers and the tolerance to which they should reproduce
 (floating-point differences across BLAS/LAPACK builds are at most a few units in
 the last shown digit):
 
-- Panel 1 (firm-level): $\hat\beta(x_6)=1.4077$, $t=5.114$; top leverage
-  $h_g = 0.997, 0.714, 0.631$; sign flip at $734$ rows ($87$ clusters).
-- Panel 2 (listed-firm): $\hat\beta(x_1)=-0.0023$, $t=-0.508$; sign flip at $6$
-  rows ($1$ cluster); significance ($|t|>2$) at $55$ rows ($9$ clusters),
-  $t=2.110$.
-- Fragile coefficient (panel 1, x2): $t$ falls from $14.50$ to $-0.05$ after
+- Panel 1 (firm-level): $\hat\beta(x_6)=1.4077$, $t=4.703$; top leverage
+  $h_g = 0.994, 0.711, 0.632$; sign flip at $714$ rows ($84$ clusters).
+- Panel 2 (listed-firm): $\hat\beta(x_1)=-0.0023$, $t=-0.457$; sign flip at $6$
+  rows ($1$ cluster); nominal significance ($t > t_{G-1,1-\alpha/2}$) at $48$
+  rows ($8$ clusters), $t=1.996$.
+- Fragile coefficient (panel 1, x2): $t$ falls from $13.34$ to $-0.04$ after
   deleting one $5$-row cluster.
-- Determinant/adjugate vs re-fit gap (Section 2): on the firm panel the gap is
-  $\le 0.05$ across the top-$15$ leverage clusters and $\det Q(x)$ becomes
-  non-positive-definite at $\approx 190$ rows; on the listed-firm panel the gap
-  at the $55$-row significance set is $\le 10^{-3}$.
+- Determinant/adjugate vs re-fit gap (Section 2): under the complete design the
+  two evaluators agree to machine precision for every tested deletion set.
 
 Requirements: Python 3.9+ with `numpy`, `scipy`, `pandas`, `matplotlib`.

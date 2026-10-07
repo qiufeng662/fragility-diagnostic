@@ -12,6 +12,7 @@ Panel 2 (right): wall-clock cost of evaluating K candidate cluster-deletion sets
 import os
 import time
 import numpy as np
+from scipy import linalg as sla
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -72,12 +73,14 @@ def refit_cost(ks):
 
 
 def cholesky_cost(ks):
-    """Cached sufficient statistics: one direct solve per candidate."""
+    """Cached sufficient statistics: a real Cholesky factor + triangular solves."""
     t0 = time.perf_counter()
     for g in range(int(ks)):
         Mg = M - A_g[g]
         v = Xty - Xgty[g]
-        np.linalg.solve(Mg, v)[0]
+        L = np.linalg.cholesky(Mg)
+        y = sla.solve_triangular(L, v, lower=True)
+        q = sla.solve_triangular(L.T, y, lower=False)[0]
     return time.perf_counter() - t0
 
 

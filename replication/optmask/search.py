@@ -58,10 +58,12 @@ def greedy_upper(pre, target, K_max=None):
 def minimal_deletion(pre, target, K_max=None, node_limit=2_000_000):
     """Branch-and-bound minimum-cost deletion set.
 
-    Returns (cost, deleted_clusters).  cost = inf when no deletion within
-    ``K_max`` rows flips the target.  Complete: the returned set is a global
-    optimum (the search explores every branch that is not pruned by the cost
-    bound, and the bound is exact).
+    Returns ``(cost, deleted_clusters, completed)``.  ``cost = inf`` when no
+    feasible deletion within ``K_max`` rows is found.  ``completed`` is True only
+    when the search exhausted the tree (or was provably pruned by the exact cost
+    bound); only then is the returned set a certified global optimum.  If the
+    node limit is hit, ``completed`` is False and the returned set is only an
+    incumbent (a feasible upper bound, not necessarily optimal).
     """
     G = pre["G"]
     c = pre["c"]
@@ -71,9 +73,11 @@ def minimal_deletion(pre, target, K_max=None, node_limit=2_000_000):
     best_cost, best_mask = greedy_upper(pre, target, K_max)
     best = [best_cost, best_mask]     # mutable closure state
     nodes = [0]
+    completed = [True]
 
     def dfs(pos, mask, cost):
         if nodes[0] > node_limit:
+            completed[0] = False
             return
         nodes[0] += 1
         if cost >= best[0]:
@@ -85,12 +89,14 @@ def minimal_deletion(pre, target, K_max=None, node_limit=2_000_000):
             return
         g = int(order[pos])
         dfs(pos + 1, mask, cost)      # keep g
-        mask.append(g)
-        dfs(pos + 1, mask, cost + c[g])  # delete g
-        mask.pop()
+        new_cost = cost + c[g]
+        if K_max is None or new_cost <= K_max:
+            mask.append(g)
+            dfs(pos + 1, mask, new_cost)  # delete g (within budget)
+            mask.pop()
 
     dfs(0, [], 0.0)
-    return best[0], best[1]
+    return best[0], best[1], completed[0]
 
 
 if __name__ == "__main__":
@@ -112,13 +118,21 @@ if __name__ == "__main__":
 
     pre = {
         "H": H, "psi_tilde": psi, "c": np.ones(G), "k": p, "G": G,
-        "Ps": np.eye(p), "n0": float(G), "G0": float(G),
+        "Ps": np.eye(p), "n0": float(G), "G0": float(G), "n_entities": 0,
         "fit": SimpleNamespace(names=["x1", "x2", "x3", "x4"],
                                beta=np.array([B / 2.0, 0, 0, 0])),
     }
     target = Target(column="x1", sign=-1, alpha=0.05)
 
-    cost, mask = minimal_deletion(pre, target)
-    print(f"minimal deletion: cost={cost}, clusters={mask} (expected cost=1, clusters=[0])")
-    assert cost == 1.0 and mask == [0], "self-test failed"
-    print("self-test passed")
+    cost, mask, completed = minimal_deletion(pre, target)
+    print(f"minimal deletion: cost={cost}, clusters={mask}, completed={completed} "
+          f"(expected cost=1, clusters=[0])")
+    assert cost == 1.0 and mask == [0] and completed, "self-test failed"
+
+    # K_max = 0 must find no feasible deletion (budget constrains the DFS, too)
+    c0, m0, done0 = minimal_deletion(pre, target, K_max=0)
+    assert c0 == float("inf") and done0, f"K_max=0 should be infeasible, got cost={c0}"
+    # a tiny node_limit must report the search as incomplete
+    c1, m1, done1 = minimal_deletion(pre, target, node_limit=0)
+    assert done1 is False, "node_limit=0 should report incomplete"
+    print("self-test passed (budget and completion status checked)")
