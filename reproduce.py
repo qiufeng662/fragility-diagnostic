@@ -56,10 +56,12 @@ def refit1(mask):
 
 
 mask1 = []
+traj = []           # (rows, clusters, beta, t) per accepted step
 nodes1 = 0
 t1 = time.perf_counter()
 flip_rows = None
 reverse_rows = None
+stop_reason = "exhausted"
 for _ in range(200):
     cur_beta = refit1(mask1)[0]
     bb, bg = cur_beta, None
@@ -73,12 +75,14 @@ for _ in range(200):
         if b < bb:
             bb, bg = b, g
     if bg is None:
+        stop_reason = "no candidate improves beta"
         print(f"[Panel 1] stopped: no candidate improves beta (current beta={cur_beta:.4f})")
         break
     mask1.append(bg)
     beta1, t1k, gk = refit1(mask1)
     nodes1 += 1
     rows1 = int(c1[mask1].sum())
+    traj.append((rows1, len(mask1), beta1, t1k))
     if flip_rows is None and beta1 < 0:
         flip_rows = rows1
         print(f"[Panel 1] sign flips after deleting {rows1} obs "
@@ -87,14 +91,20 @@ for _ in range(200):
         crit = stats.t.ppf(1 - 0.05 / 2, gk - 1)
         if beta1 < 0 and abs(t1k) > crit:
             reverse_rows = rows1
+            stop_reason = "reverse-significant found"
             print(f"[Panel 1] reverse-significant after deleting {rows1} obs, "
                   f"clusters={len(mask1)}, t={t1k:.3f} (crit={crit:.3f})")
             break
 
 if reverse_rows is None:
     print(f"[Panel 1] no reverse-significant deletion along the examined path "
-          f"up to {rows1} obs ({len(mask1)} clusters), nodes={nodes1}, "
-          f"wall={time.perf_counter()-t1:.0f}s")
+          f"up to {rows1} obs ({len(mask1)} clusters), stop_reason={stop_reason}, "
+          f"nodes={nodes1}, wall={time.perf_counter()-t1:.0f}s")
+
+# save the accepted-step trajectory (machine-readable)
+pd.DataFrame(traj, columns=["rows", "clusters", "beta", "t"]).to_csv(
+    os.path.join(HERE, "data", "panel_firm_trajectory.csv"), index=False)
+print(f"[Panel 1] trajectory saved: {len(traj)} steps, stop_reason={stop_reason}")
 
 # ---------------- Panel 2: listed firms (fragile conclusion) ----------------
 d2 = pd.read_csv(os.path.join(HERE, "data", "panel_listed.csv"))

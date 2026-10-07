@@ -44,6 +44,15 @@ class TWFE_cluster_valid:
     design (real regressors first, then year dummies) so the whitened cluster
     matrices satisfy sum_g H_g = I; ``names``, ``beta`` and ``se`` expose only
     the k_real real regressors.
+
+    Interface restrictions.  This estimator assumes (i) a one-to-one
+    correspondence between entities and clusters (the cluster dimension is the
+    entity dimension), and (ii) a full-rank within-entity demeaned design with
+    n > p_eff and G > 1 residual clusters.  For degenerate inputs (a single
+    cluster, no residual degrees of freedom, or a rank-deficient design) the
+    standard errors are set to NaN rather than fabricated by denominator
+    clipping; the general rank-deficient case should use the actual design rank
+    instead of the entity-count convention used here.
     """
 
     def __init__(self, y_col: str, regressors: Sequence[str], entity_col: str,
@@ -111,9 +120,13 @@ class TWFE_cluster_valid:
         g = int(np.unique(code).size)
         n_entities_kept = int(np.unique(entity_code[sub]).size)
         p_eff = k_all + n_entities_kept          # full-design rank (absorbed entity FE)
-        scale = (g / max(g - 1, 1)) * ((n - 1) / max(n - p_eff, 1))
-        vcov_all = xtx_inv_all @ meat_all @ xtx_inv_all * scale
-        se_all = np.sqrt(np.clip(np.diag(vcov_all), 1e-30, None))
+        if g <= 1 or n <= p_eff:
+            # inference unavailable: single cluster or no residual degrees of freedom
+            se_all = np.full(k_all, np.nan)
+        else:
+            scale = (g / (g - 1)) * ((n - 1) / (n - p_eff))
+            vcov_all = xtx_inv_all @ meat_all @ xtx_inv_all * scale
+            se_all = np.sqrt(np.clip(np.diag(vcov_all), 1e-30, None))
 
         h = np.clip(np.sum((Xs @ xtx_inv_all) * Xs, axis=1), 0, 0.9999)
         infl = (xtx_inv_all @ Xs.T) * (resid / (1.0 - h))

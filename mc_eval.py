@@ -132,8 +132,9 @@ for G in [15, 30]:
                 tms.append(opt)
                 if ok:
                     ratios.append(len(mask) / opt)
+        tm_str = str(int(np.median(tms))) if tms else "NA"
+        ratio_str = f"{np.mean(ratios):.3f}" if ratios else "NA"
         print(f"{G:>3} {tau:>5.2f} | {found/200*100:>12.0f}% "
               f"{found_a/200*100:>10.0f}% {np.mean(sizes) if sizes else 0:>11.2f} "
               f"{np.mean(sizes_a) if sizes_a else 0:>9.2f} "
-              f"{int(np.median(tms)) if tms else 0:>8} "
-              f"{np.mean(ratios) if ratios else 0:>12.3f}")
+              f"{tm_str:>8} {ratio_str:>12}")

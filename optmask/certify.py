@@ -126,7 +126,7 @@ def det_adj_margin(pre, target, deleted_clusters):
     G_new = pre["G0"] - float(x.sum())
     n_entities_kept = pre["n_entities"] - float(x.sum())
     p_eff = pre["k"] + max(n_entities_kept, 0.0)   # full-design rank under the mask
-    if G_new < 1 or n_new <= p_eff:
+    if G_new <= 1 or n_new <= p_eff:              # single cluster or no residual df
         return -np.inf
     scale = (G_new / (G_new - 1.0)) * ((n_new - 1.0) / (n_new - p_eff))
     rho = inf.t_crit(target.alpha, G_new - 1) ** 2 * scale
