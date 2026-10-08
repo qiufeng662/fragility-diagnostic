@@ -181,29 +181,54 @@ def first_order_prefix(H, psi, c, a, beta1, feasible, evals):
     return mask, None, evals[0], 'pool'
 
 
+def _signed_t(H, psi, c, a, w, rho_full):
+    """Signed t-statistic of the sign-and-significance target under continuous
+    cluster weights w (dict cluster -> weight).  The coefficient uses
+    B/2 - a^T Q(w)^{-1} r(w); the sandwich variance uses the re-estimated
+    retained-cluster scores psi_g + H_g Q(w)^{-1} r(w) with retained weight
+    1 - w_g; the CR1 factor and reference threshold are held fixed at their
+    full-sample values (the infinitesimal limit).  Returns None when the
+    retained design is singular or the variance is non-positive."""
+    G = len(H)
+    Q = np.eye(P) - sum(w.get(g, 0.0) * H[g] for g in range(G))
+    if np.linalg.eigvalsh(Q).min() <= EIG_TOL:
+        return None
+    r = sum(w.get(g, 0.0) * psi[g] for g in range(G))
+    z = np.linalg.solve(Q, r)
+    beta1 = B / 2.0 - a @ z
+    v = 0.0
+    for g in range(G):
+        wg = w.get(g, 0.0)
+        psig = psi[g] + H[g] @ z
+        zg = np.linalg.solve(Q, psig)
+        v += (1.0 - wg) * (a @ zg) ** 2
+    se = np.sqrt(rho_full * v)
+    if se <= 0:
+        return None
+    return beta1 / se
+
+
 def significance_prefix(H, psi, c, a, beta1, feasible, evals):
-    """Significance-margin baseline: rank clusters by the first-order signed
-    t-statistic after deleting each single cluster, then evaluate prefixes
-    exactly.  The first-order coefficient is B/2 - a^T psi_g, the first-order
-    retained variance is sum_{g' != g} (a^T psi_{g'})^2, and the CR1 factor is
-    evaluated at the post-deletion cluster count and row count."""
+    """Full-target first-order baseline: rank clusters by the central-difference
+    derivative of the signed t-statistic with respect to each cluster weight,
+    evaluated at zero deletion.  The derivative includes the chain changes in
+    the coefficient, the inverse information matrix, and the re-estimated
+    retained-cluster scores; the CR1 factor and reference threshold are held
+    fixed at their full-sample values.  The final binary check restores the
+    actual retained cluster count, row count, and rank."""
     G = len(H)
     n = sum(c[g] for g in range(G))
+    rho_full = stats.t.ppf(1 - ALPHA / 2, G - 1) ** 2 * (G / (G - 1)) * ((n - 1) / (n - P))
+    eps = 1e-5
     scored = []
     for g in range(G):
-        q = B / 2.0 - (a @ psi[g])
-        v = sum((a @ psi[gp]) ** 2 for gp in range(G) if gp != g)
-        G_new = G - 1
-        n_new = n - c[g]
-        if G_new <= 1 or n_new <= P:
-            rho = None
+        tp = _signed_t(H, psi, c, a, {g: eps}, rho_full)
+        tm = _signed_t(H, psi, c, a, {g: -eps}, rho_full)
+        if tp is None or tm is None:
+            deriv = float('inf')
         else:
-            rho = stats.t.ppf(1 - ALPHA / 2, G_new - 1) ** 2 * (G_new / (G_new - 1)) * ((n_new - 1) / (n_new - P))
-        if rho is None or rho * v <= 0:
-            score = float('-inf') if q < 0 else float('inf')
-        else:
-            score = q / np.sqrt(rho * v)
-        scored.append((score, g))
+            deriv = (tp - tm) / (2.0 * eps)
+        scored.append((deriv, g))
     scored.sort(key=lambda x: x[0])
     mask = []
     for _, g in scored:
@@ -244,7 +269,7 @@ header = ["setting", "infeasible", "feasible", "fo_found", "sf_found", "rg_found
           "fo_ms", "sf_ms", "rg_ms", "fo_miss_pool", "sf_miss_pool",
           "rg_miss_stall", "rg_miss_invalid", "rg_miss_pool",
           "fo_rg_paired_diff", "sf_rg_paired_diff", "fo_rg_both", "sf_rg_both",
-          "fo_only", "sf_only", "rg_only"]
+          "fo_only", "sf_only", "rg_only", "rg_only_vs_sf"]
 
 print(f"{'setting':>20} {'infeas':>6} {'feas':>5} {'FO':>6} {'SF':>6} {'RG':>6} "
       f"{'FO c/o':>7} {'SF c/o':>7} {'RG c/o':>7} {'FO ev':>6} {'SF ev':>6} {'RG ev':>6} "
@@ -261,7 +286,7 @@ for conc in ["concentrated", "dispersed"]:
         fo_miss = sf_miss = 0
         rg_miss = {'stall': 0, 'invalid': 0, 'pool': 0}
         fo_rg_paired, sf_rg_paired = [], []
-        fo_only = sf_only = rg_only = 0
+        fo_only = sf_only = rg_only = rg_only_vs_sf = 0
         fo_rg_both = sf_rg_both = 0
         for rep in range(REPS):
             H, psi, c, a = build_instance(conc, sigma)
@@ -318,6 +343,8 @@ for conc in ["concentrated", "dispersed"]:
                 sf_rg_paired.append(sf_cost / opt - rg_cost / opt)
             elif sf_ok:
                 sf_only += 1
+            if rg_ok and not sf_ok:
+                rg_only_vs_sf += 1
         fo_frac = fo_found / feasible_n if feasible_n else 0.0
         sf_frac = sf_found / feasible_n if feasible_n else 0.0
         rg_frac = rg_found / feasible_n if feasible_n else 0.0
@@ -338,7 +365,7 @@ for conc in ["concentrated", "dispersed"]:
                      round(fo_ms, 3), round(sf_ms, 3), round(rg_ms, 3),
                      fo_miss, sf_miss, rg_miss['stall'], rg_miss['invalid'], rg_miss['pool'],
                      round(fo_rg_pd, 4), round(sf_rg_pd, 4), fo_rg_both, sf_rg_both,
-                     fo_only, sf_only, rg_only])
+                     fo_only, sf_only, rg_only, rg_only_vs_sf])
         print(f"{label:>20} {infeasible_n:>6} {feasible_n:>5} "
               f"{fo_frac:>6.2f} {sf_frac:>6.2f} {rg_frac:>6.2f} "
               f"{fo_ratio:>7.2f} {sf_ratio:>7.2f} {rg_ratio:>7.2f} "
@@ -346,7 +373,7 @@ for conc in ["concentrated", "dispersed"]:
               f"{fo_ms:>7.2f} {sf_ms:>7.2f} {rg_ms:>7.2f} | "
               f"pd(FO-RG)={fo_rg_pd:+.3f} pd(SF-RG)={sf_rg_pd:+.3f} "
               f"both FO&RG={fo_rg_both} SF&RG={sf_rg_both} "
-              f"only FO={fo_only} SF={sf_only} RG={rg_only}")
+              f"only FO={fo_only} SF={sf_only} RG(vsFO)={rg_only} RG(vsSF)={rg_only_vs_sf}")
 
 with open("data/mc_method_compare_results.csv", "w", newline="") as f:
     w = csv.writer(f)

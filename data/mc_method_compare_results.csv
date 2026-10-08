@@ -1,5 +1,5 @@
-setting,infeasible,feasible,fo_found,sf_found,rg_found,fo_cost_opt,sf_cost_opt,rg_cost_opt,fo_evals,sf_evals,rg_evals,fo_ms,sf_ms,rg_ms,fo_miss_pool,sf_miss_pool,rg_miss_stall,rg_miss_invalid,rg_miss_pool,fo_rg_paired_diff,sf_rg_paired_diff,fo_rg_both,sf_rg_both,fo_only,sf_only,rg_only
-"concentrated, sigma=0.5",21,79,57,57,63,1.2458,1.2442,1.0141,8.06,8.05,64.62,2.75,4.439,5.471,22,22,0,16,0,0.2302,0.2286,57,57,0,0,6
-"concentrated, sigma=1.0",19,81,52,52,57,1.075,1.075,1.0113,8.17,8.17,68.02,3.336,4.688,5.809,29,29,0,24,0,0.0626,0.0626,52,52,0,0,5
-"dispersed, sigma=0.5",0,100,55,47,98,1.7115,1.7697,1.2819,8.62,9.31,54.63,1.193,2.945,3.59,45,53,0,2,0,0.4711,0.5007,55,46,0,1,43
-"dispersed, sigma=1.0",0,100,80,81,100,1.6745,1.6835,1.2174,6.41,6.35,43.85,1.88,3.309,3.329,20,19,0,0,0,0.4353,0.4473,80,81,0,0,20
+setting,infeasible,feasible,fo_found,sf_found,rg_found,fo_cost_opt,sf_cost_opt,rg_cost_opt,fo_evals,sf_evals,rg_evals,fo_ms,sf_ms,rg_ms,fo_miss_pool,sf_miss_pool,rg_miss_stall,rg_miss_invalid,rg_miss_pool,fo_rg_paired_diff,sf_rg_paired_diff,fo_rg_both,sf_rg_both,fo_only,sf_only,rg_only,rg_only_vs_sf
+"concentrated, sigma=0.5",21,79,57,63,63,1.2458,1.0986,1.0141,8.06,6.92,64.62,3.141,10.813,5.824,22,16,0,16,0,0.2302,0.0845,57,63,0,0,6,0
+"concentrated, sigma=1.0",19,81,52,57,57,1.075,1.0655,1.0113,8.17,7.59,68.02,3.313,11.273,6.471,29,24,0,24,0,0.0626,0.0542,52,57,0,0,5,0
+"dispersed, sigma=0.5",0,100,55,67,98,1.7115,1.6164,1.2819,8.62,7.81,54.63,1.617,11.743,4.812,45,33,0,2,0,0.4711,0.3414,55,67,0,0,43,31
+"dispersed, sigma=1.0",0,100,80,93,100,1.6745,1.5302,1.2174,6.41,5.14,43.85,2.692,12.186,4.78,20,7,0,0,0,0.4353,0.3076,80,93,0,0,20,7
