@@ -181,6 +181,38 @@ def first_order_prefix(H, psi, c, a, beta1, feasible, evals):
     return mask, None, evals[0], 'pool'
 
 
+def significance_prefix(H, psi, c, a, beta1, feasible, evals):
+    """Significance-margin baseline: rank clusters by the first-order signed
+    t-statistic after deleting each single cluster, then evaluate prefixes
+    exactly.  The first-order coefficient is B/2 - a^T psi_g, the first-order
+    retained variance is sum_{g' != g} (a^T psi_{g'})^2, and the CR1 factor is
+    evaluated at the post-deletion cluster count and row count."""
+    G = len(H)
+    n = sum(c[g] for g in range(G))
+    scored = []
+    for g in range(G):
+        q = B / 2.0 - (a @ psi[g])
+        v = sum((a @ psi[gp]) ** 2 for gp in range(G) if gp != g)
+        G_new = G - 1
+        n_new = n - c[g]
+        if G_new <= 1 or n_new <= P:
+            rho = None
+        else:
+            rho = stats.t.ppf(1 - ALPHA / 2, G_new - 1) ** 2 * (G_new / (G_new - 1)) * ((n_new - 1) / (n_new - P))
+        if rho is None or rho * v <= 0:
+            score = float('-inf') if q < 0 else float('inf')
+        else:
+            score = q / np.sqrt(rho * v)
+        scored.append((score, g))
+    scored.sort(key=lambda x: x[0])
+    mask = []
+    for _, g in scored:
+        mask = mask + [g]
+        if feasible(mask):
+            return mask, cost(mask, c), evals[0], 'found'
+    return mask, None, evals[0], 'pool'
+
+
 def recursive_search(H, psi, c, a, beta1, feasible, evals):
     cand = list(range(len(H)))
     mask = []
@@ -207,26 +239,30 @@ def recursive_search(H, psi, c, a, beta1, feasible, evals):
 
 
 rows = []
-header = ["setting", "infeasible", "feasible", "fo_found", "rg_found",
-          "fo_cost_opt", "rg_cost_opt", "fo_evals", "rg_evals",
-          "fo_ms", "rg_ms", "fo_miss_pool", "rg_miss_stall",
-          "rg_miss_invalid", "rg_miss_pool"]
+header = ["setting", "infeasible", "feasible", "fo_found", "sf_found", "rg_found",
+          "fo_cost_opt", "sf_cost_opt", "rg_cost_opt", "fo_evals", "sf_evals", "rg_evals",
+          "fo_ms", "sf_ms", "rg_ms", "fo_miss_pool", "sf_miss_pool",
+          "rg_miss_stall", "rg_miss_invalid", "rg_miss_pool",
+          "fo_rg_paired_diff", "sf_rg_paired_diff", "fo_rg_both", "sf_rg_both",
+          "fo_only", "sf_only", "rg_only"]
 
-print(f"{'setting':>20} {'infeas':>6} {'feas':>5} {'FO found':>9} {'RG found':>9} "
-      f"{'FO c/opt':>9} {'RG c/opt':>9} {'FO evals':>9} {'RG evals':>9} "
-      f"{'FO ms':>8} {'RG ms':>8} | RG miss(stall/invalid/pool)")
+print(f"{'setting':>20} {'infeas':>6} {'feas':>5} {'FO':>6} {'SF':>6} {'RG':>6} "
+      f"{'FO c/o':>7} {'SF c/o':>7} {'RG c/o':>7} {'FO ev':>6} {'SF ev':>6} {'RG ev':>6} "
+      f"{'FO ms':>7} {'SF ms':>7} {'RG ms':>7}")
 for conc in ["concentrated", "dispersed"]:
     for sigma in [0.5, 1.0]:
         label = f"{conc}, sigma={sigma}"
         feasible_n = 0
         infeasible_n = 0
-        fo_found = 0
-        rg_found = 0
-        fo_ratios, rg_ratios, fo_evals, rg_evals = [], [], [], []
-        t_fo = 0.0
-        t_rg = 0.0
-        fo_miss = 0
+        fo_found = sf_found = rg_found = 0
+        fo_ratios, sf_ratios, rg_ratios = [], [], []
+        fo_evals, sf_evals, rg_evals = [], [], []
+        t_fo = t_sf = t_rg = 0.0
+        fo_miss = sf_miss = 0
         rg_miss = {'stall': 0, 'invalid': 0, 'pool': 0}
+        fo_rg_paired, sf_rg_paired = [], []
+        fo_only = sf_only = rg_only = 0
+        fo_rg_both = sf_rg_both = 0
         for rep in range(REPS):
             H, psi, c, a = build_instance(conc, sigma)
             if rep == 0:
@@ -243,39 +279,74 @@ for conc in ["concentrated", "dispersed"]:
             t_fo += time.perf_counter() - t0
             beta1, _, feasible, evals = make_evaluator(H, psi, c, a)
             t0 = time.perf_counter()
+            _, sf_cost, sf_e, sf_stop = significance_prefix(H, psi, c, a, beta1, feasible, evals)
+            t_sf += time.perf_counter() - t0
+            beta1, _, feasible, evals = make_evaluator(H, psi, c, a)
+            t0 = time.perf_counter()
             _, rg_cost, rg_e, rg_stop = recursive_search(H, psi, c, a, beta1, feasible, evals)
             t_rg += time.perf_counter() - t0
             fo_evals.append(fo_e)
+            sf_evals.append(sf_e)
             rg_evals.append(rg_e)
-            if fo_cost is not None:
+            fo_ok = fo_cost is not None
+            sf_ok = sf_cost is not None
+            rg_ok = rg_cost is not None
+            if fo_ok:
                 fo_found += 1
                 fo_ratios.append(fo_cost / opt)
             else:
                 fo_miss += 1
-            if rg_cost is not None:
+            if sf_ok:
+                sf_found += 1
+                sf_ratios.append(sf_cost / opt)
+            else:
+                sf_miss += 1
+            if rg_ok:
                 rg_found += 1
                 rg_ratios.append(rg_cost / opt)
             else:
                 rg_miss[rg_stop] += 1
+            if fo_ok and rg_ok:
+                fo_rg_both += 1
+                fo_rg_paired.append(fo_cost / opt - rg_cost / opt)
+            elif fo_ok:
+                fo_only += 1
+            elif rg_ok:
+                rg_only += 1
+            if sf_ok and rg_ok:
+                sf_rg_both += 1
+                sf_rg_paired.append(sf_cost / opt - rg_cost / opt)
+            elif sf_ok:
+                sf_only += 1
         fo_frac = fo_found / feasible_n if feasible_n else 0.0
+        sf_frac = sf_found / feasible_n if feasible_n else 0.0
         rg_frac = rg_found / feasible_n if feasible_n else 0.0
         fo_ratio = np.mean(fo_ratios) if fo_ratios else float('nan')
+        sf_ratio = np.mean(sf_ratios) if sf_ratios else float('nan')
         rg_ratio = np.mean(rg_ratios) if rg_ratios else float('nan')
         fo_e = np.mean(fo_evals) if fo_evals else float('nan')
+        sf_e = np.mean(sf_evals) if sf_evals else float('nan')
         rg_e = np.mean(rg_evals) if rg_evals else float('nan')
         fo_ms = t_fo / feasible_n * 1e3 if feasible_n else 0.0
+        sf_ms = t_sf / feasible_n * 1e3 if feasible_n else 0.0
         rg_ms = t_rg / feasible_n * 1e3 if feasible_n else 0.0
-        rows.append([label, infeasible_n, feasible_n, fo_found, rg_found,
-                     round(fo_ratio, 4), round(rg_ratio, 4),
-                     round(fo_e, 2), round(rg_e, 2),
-                     round(fo_ms, 3), round(rg_ms, 3),
-                     fo_miss, rg_miss['stall'], rg_miss['invalid'], rg_miss['pool']])
+        fo_rg_pd = np.mean(fo_rg_paired) if fo_rg_paired else float('nan')
+        sf_rg_pd = np.mean(sf_rg_paired) if sf_rg_paired else float('nan')
+        rows.append([label, infeasible_n, feasible_n, fo_found, sf_found, rg_found,
+                     round(fo_ratio, 4), round(sf_ratio, 4), round(rg_ratio, 4),
+                     round(fo_e, 2), round(sf_e, 2), round(rg_e, 2),
+                     round(fo_ms, 3), round(sf_ms, 3), round(rg_ms, 3),
+                     fo_miss, sf_miss, rg_miss['stall'], rg_miss['invalid'], rg_miss['pool'],
+                     round(fo_rg_pd, 4), round(sf_rg_pd, 4), fo_rg_both, sf_rg_both,
+                     fo_only, sf_only, rg_only])
         print(f"{label:>20} {infeasible_n:>6} {feasible_n:>5} "
-              f"{fo_frac:>9.2f} {rg_frac:>9.2f} "
-              f"{fo_ratio:>9.2f} {rg_ratio:>9.2f} "
-              f"{fo_e:>9.1f} {rg_e:>9.1f} "
-              f"{fo_ms:>8.2f} {rg_ms:>8.2f} | "
-              f"RG miss({rg_miss['stall']}/{rg_miss['invalid']}/{rg_miss['pool']})")
+              f"{fo_frac:>6.2f} {sf_frac:>6.2f} {rg_frac:>6.2f} "
+              f"{fo_ratio:>7.2f} {sf_ratio:>7.2f} {rg_ratio:>7.2f} "
+              f"{fo_e:>6.1f} {sf_e:>6.1f} {rg_e:>6.1f} "
+              f"{fo_ms:>7.2f} {sf_ms:>7.2f} {rg_ms:>7.2f} | "
+              f"pd(FO-RG)={fo_rg_pd:+.3f} pd(SF-RG)={sf_rg_pd:+.3f} "
+              f"both FO&RG={fo_rg_both} SF&RG={sf_rg_both} "
+              f"only FO={fo_only} SF={sf_only} RG={rg_only}")
 
 with open("data/mc_method_compare_results.csv", "w", newline="") as f:
     w = csv.writer(f)
